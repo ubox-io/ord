@@ -21,6 +21,7 @@ pub mod restore;
 pub mod sats;
 pub mod send;
 pub mod transactions;
+pub mod claim;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WalletCommand {
@@ -66,6 +67,8 @@ pub(crate) enum Subcommand {
   Outputs,
   #[command(about = "List unspent cardinal outputs in wallet")]
   Cardinals,
+  #[command(about = "mint rune")]
+  Claim(claim::Claim),
 }
 
 impl WalletCommand {
@@ -103,6 +106,7 @@ impl WalletCommand {
       Subcommand::Outputs => outputs::run(wallet),
       Subcommand::Cardinals => cardinals::run(wallet),
       Subcommand::Create(_) | Subcommand::Restore(_) => unreachable!(),
+      Subcommand::Claim(claim) => claim.run(wallet),
     }
   }
 }

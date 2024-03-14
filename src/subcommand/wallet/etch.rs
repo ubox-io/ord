@@ -1,4 +1,5 @@
 use super::*;
+use crate::runes::Mint;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Etch {
@@ -9,9 +10,11 @@ pub(crate) struct Etch {
   #[clap(long, help = "Etch rune <RUNE>. May contain `.` or `•`as spacers.")]
   rune: SpacedRune,
   #[clap(long, help = "Set supply to <SUPPLY>.")]
-  supply: Decimal,
+  supply: Option<Decimal>,
   #[clap(long, help = "Set currency symbol to <SYMBOL>.")]
   symbol: char,
+  #[clap(long, help = "Set limit to <LIMIT>.")]
+  limit: Option<Decimal>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -57,23 +60,48 @@ impl Etch {
 
     let destination = wallet.get_change_address()?;
 
-    let runestone = Runestone {
-      etching: Some(Etching {
-        divisibility: self.divisibility,
-        mint: None,
-        rune: Some(rune),
-        spacers,
-        symbol: Some(self.symbol),
-      }),
-      edicts: vec![Edict {
-        amount: self.supply.to_amount(self.divisibility)?,
-        id: 0,
-        output: 1,
-      }],
-      default_output: None,
-      burn: false,
-      claim: None,
-    };
+    ensure!(
+      self.limit.is_some() || self.supply.is_some(),
+      "<LIMIT> or <SUPPLY> can not both missing"
+    );
+    let runestone;
+    if let Some(limit) = self.limit {
+      runestone = Runestone {
+        etching: Some(Etching {
+          divisibility: self.divisibility,
+          mint: Some(  Mint{
+            deadline:None,
+            limit:Some(limit.to_amount(self.divisibility)?),
+            term:None,
+          }),
+          rune: Some(rune),
+          spacers,
+          symbol: Some(self.symbol),
+        }),
+        edicts: vec![],
+        default_output: None,
+        burn: false,
+        claim: None,
+      };
+    } else {
+      runestone  = Runestone {
+        etching: Some(Etching {
+          divisibility: self.divisibility,
+          mint: None,
+          rune: Some(rune),
+          spacers,
+          symbol: Some(self.symbol),
+        }),
+        edicts: vec![Edict {
+          amount: self.supply.ok_or(anyhow!("no supply param"))?.to_amount(self.divisibility)?,
+          id: 0,
+          output: 1,
+        }],
+        default_output: None,
+        burn: false,
+        claim: None,
+      };
+    }
 
     let script_pubkey = runestone.encipher();
 
