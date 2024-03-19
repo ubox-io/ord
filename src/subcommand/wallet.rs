@@ -22,6 +22,7 @@ pub mod sats;
 pub mod send;
 pub mod transactions;
 pub mod claim;
+pub mod burn;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WalletCommand {
@@ -69,6 +70,8 @@ pub(crate) enum Subcommand {
   Cardinals,
   #[command(about = "mint rune")]
   Claim(claim::Claim),
+  #[command(about = "burn rune")]
+  Burn(burn::Burn),
 }
 
 impl WalletCommand {
@@ -107,6 +110,7 @@ impl WalletCommand {
       Subcommand::Cardinals => cardinals::run(wallet),
       Subcommand::Create(_) | Subcommand::Restore(_) => unreachable!(),
       Subcommand::Claim(claim) => claim.run(wallet),
+      Subcommand::Burn(burn) => burn.run(wallet),
     }
   }
 }
