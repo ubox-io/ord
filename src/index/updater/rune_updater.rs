@@ -2,6 +2,7 @@ use {
   super::*,
   crate::runes::{varint, Edict, Runestone},
 };
+use crate::ubox::runes::rune_event_catcher::{RuneEventCatcher};
 
 struct Claim {
   id: u128,
@@ -38,6 +39,7 @@ pub(super) struct RuneUpdater<'a, 'db, 'tx> {
   pub(super) timestamp: u32,
   pub(super) transaction_id_to_rune: &'a mut Table<'db, 'tx, &'static TxidValue, u128>,
   pub(super) updates: HashMap<RuneId, RuneUpdate>,
+  pub(super) rune_event_catcher: RuneEventCatcher<'a, 'db, 'tx>,
 }
 
 impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
@@ -45,6 +47,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
     let runestone = Runestone::from_transaction(tx);
 
     let mut unallocated = self.unallocated(tx)?;
+    let mut events = vec![];
 
     let burn = runestone
       .as_ref()
@@ -59,6 +62,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
 
     let mut allocated: Vec<HashMap<u128, u128>> = vec![HashMap::new(); tx.output.len()];
 
+    let mut claim_flag = false;
     if let Some(runestone) = runestone {
       if let Some(claim) = runestone
         .claim
@@ -74,10 +78,16 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
 
         update.mints += 1;
         update.supply += claim.limit;
+        // ubox event
+        claim_flag = true;
       }
 
       let mut etched = self.etched(index, &runestone)?;
-
+      // ubox event
+      if let Some(ref etched) = etched {
+        let event = self.rune_event_catcher.catch_etching_event(etched.balance, etched.divisibility, etched.id, etched.mint, etched.rune, etched.spacers, etched.symbol)?;
+        events.push(event);
+      }
       if !burn {
         for Edict { id, amount, output } in runestone.edicts {
           let Ok(output) = usize::try_from(output) else {
@@ -110,6 +120,11 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
             if amount > 0 {
               *balance -= amount;
               *allocated[output].entry(id).or_default() += amount;
+            }
+            // ubox event
+            if amount > 0 {
+              let event = self.rune_event_catcher.catch_edict_event(output, id, amount, false, true).expect("");
+              events.push(event);
             }
           };
 
@@ -165,6 +180,9 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
     if burn {
       for (id, balance) in unallocated {
         *burned.entry(id).or_default() += balance;
+        // ubox event
+        let event = self.rune_event_catcher.catch_burn_event(id, balance)?;
+        events.push(event);
       }
     } else {
       // assign all un-allocated runes to the default output, or the first non
@@ -184,14 +202,25 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
           if balance > 0 {
             *allocated[vout].entry(id).or_default() += balance;
           }
+          // ubox event
+          if balance > 0 {
+            let event = self.rune_event_catcher.catch_edict_event(vout, id, balance, claim_flag, false)?;
+            events.push(event);
+          }
         }
       } else {
         for (id, balance) in unallocated {
           if balance > 0 {
             *burned.entry(id).or_default() += balance;
           }
+          // ubox event
+          if balance > 0 {
+            let event = self.rune_event_catcher.catch_burn_event(id, balance)?;
+            events.push(event);
+          }
         }
       }
+      //
     }
 
     // update outpoint balances
@@ -226,7 +255,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
           txid,
           vout: vout.try_into().unwrap(),
         }
-        .store(),
+          .store(),
         buffer.as_slice(),
       )?;
     }
@@ -239,6 +268,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
         .or_default()
         .burned += amount;
     }
+    self.rune_event_catcher.save_events(txid, &events)?;
 
     Ok(())
   }
@@ -285,7 +315,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
         symbol,
         timestamp: self.timestamp,
       }
-      .store(),
+        .store(),
     )?;
 
     let inscription_id = InscriptionId { txid, index: 0 };
@@ -312,10 +342,10 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
       .map(|rune| rune < self.minimum || rune.is_reserved())
       .unwrap_or_default()
       || etching
-        .rune
-        .and_then(|rune| self.rune_to_id.get(rune.0).transpose())
-        .transpose()?
-        .is_some()
+      .rune
+      .and_then(|rune| self.rune_to_id.get(rune.0).transpose())
+      .transpose()?
+      .is_some()
     {
       return Ok(None);
     }

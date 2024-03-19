@@ -122,6 +122,7 @@ pub mod subcommand;
 mod tally;
 pub mod templates;
 pub mod wallet;
+pub mod ubox;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
 

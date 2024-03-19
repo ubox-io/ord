@@ -5,6 +5,7 @@ use {
   std::sync::mpsc,
   tokio::sync::mpsc::{error::TryRecvError, Receiver, Sender},
 };
+use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
 mod inscription_updater;
 mod rune_updater;
@@ -603,6 +604,9 @@ impl<'index> Updater<'index> {
         timestamp: block.header.time,
         transaction_id_to_rune: &mut transaction_id_to_rune,
         updates: HashMap::new(),
+        rune_event_catcher: RuneEventCatcher{
+          transaction_id_to_rune_event:&mut wtx.open_table(TRANSACTION_ID_TO_RUNE_EVENT)?
+        },
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {

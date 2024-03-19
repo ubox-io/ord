@@ -44,7 +44,7 @@ use {
 
 mod accept_encoding;
 mod accept_json;
-mod error;
+pub(crate) mod error;
 pub(crate) mod query;
 
 enum SpawnConfig {
@@ -254,6 +254,8 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+        // ubox event
+        .route("/rune/block/:block_hash/event", get(Self::rune_block_events))
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))
         .layer(Extension(settings.clone()))
@@ -1779,7 +1781,44 @@ impl Server {
 
     Redirect::to(&destination)
   }
+
+  // ubox event
+  async fn rune_block_events(
+    Extension(index): Extension<Arc<Index>>,
+    Path(block_hash): Path<String>,
+  ) -> ServerResult<Json<ubox::runes::rune_server::RuneBlockEvents>> {
+    task::block_in_place(|| {
+      if !index.has_sat_index() {
+        return Err(ServerError::NotFound(
+          "this server has no sat index".to_string(),
+        ));
+      }
+      let blockhash = BlockHash::from_str(&block_hash).unwrap();
+
+      let mut events = vec![];
+      if let Ok(block_opt) = index.get_block_info_by_hash(blockhash) {
+        if let Some(block) = block_opt {
+          // 处理获取到的 block
+          for txid in block.tx.iter() {
+            if let Ok(tx_events) = index.get_rune_event_by_txid(txid) {
+              for event in tx_events {
+                let txid_event = ubox::runes::rune_server::TxidEvent {
+                  txid: txid.clone(),
+                  event: event.clone(),
+                };
+                events.push(txid_event);
+              }
+            }
+          }
+        }
+      }
+
+      Ok(Json(ubox::runes::rune_server::RuneBlockEvents { events, blockhash: block_hash }))
+    })
+  }
 }
+
+
 
 #[cfg(test)]
 mod tests {

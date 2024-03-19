@@ -145,6 +145,8 @@ impl Send {
       .cloned()
       .collect::<Vec<OutPoint>>();
 
+    println!("locked_outputs {:?}",&locked_outputs);
+
     if !bitcoin_client.lock_unspent(&locked_outputs)? {
       bail!("failed to lock UTXOs");
     }
