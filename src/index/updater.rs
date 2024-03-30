@@ -587,8 +587,6 @@ impl<'index> Updater<'index> {
       let mut transaction_id_to_rune = wtx.open_table(TRANSACTION_ID_TO_RUNE)?;
       // ubox event
       let mut transaction_id_to_rune_event = wtx.open_table(TRANSACTION_ID_TO_RUNE_EVENT)?;
-      let mut outpoint_to_rune_balances_ = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
-      let mut transaction_id_to_transaction_ = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
 
       let runes = statistic_to_count
         .get(&Statistic::Runes.into())?
@@ -614,13 +612,31 @@ impl<'index> Updater<'index> {
         transaction_id_to_rune: &mut transaction_id_to_rune,
         rune_event_catcher: RuneEventCatcher {
           transaction_id_to_rune_event: &mut transaction_id_to_rune_event,
-          outpoint_to_balances: &mut outpoint_to_rune_balances_,
-          transaction_id_to_transaction: &mut transaction_id_to_transaction_
         }
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
-        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
+        // ubox event
+        let mut tx_map: HashMap<Txid, Transaction> = HashMap::new();
+        let mut pre_txs: Vec<Txid> = vec![];
+        for input in &tx.input {
+          if !pre_txs.contains(&input.previous_output.txid) {
+            pre_txs.push(input.previous_output.txid);
+          }
+        }
+        for txid in pre_txs {
+          let result = transaction_id_to_transaction.get(&txid.store());
+          if result.is_ok() {
+            let option = result.unwrap();
+            if let Some(previous_tx) = option {
+              if let Ok(tx) = Transaction::consensus_decode(&mut previous_tx.value()) {
+                tx_map.insert(txid, tx);
+              }
+            }
+          }
+        }
+
+        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid,tx_map)?;
       }
 
       rune_updater.update()?;

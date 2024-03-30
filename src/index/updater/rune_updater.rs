@@ -1,3 +1,5 @@
+use redb::AccessGuard;
+use crate::ubox::runes::rune_event::{RuneBalance, RuneEventOutput};
 use super::*;
 use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
@@ -33,12 +35,49 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
 }
 
 impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
-  pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid) -> Result<()> {
+  pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid, tx_map: HashMap<Txid, Transaction>) -> Result<()> {
     let runestone = Runestone::from_transaction(tx);
-    println!("runestone");
 
     //ubox event
-    let rune_event_inputs = self.rune_event_catcher.get_input_runes(tx);
+    let mut rune_event_inputs: Vec<RuneEventOutput> = vec![];
+    let mut pre_txs: Vec<Txid> = vec![];
+    for input in &tx.input {
+      if !pre_txs.contains(&input.previous_output.txid) {
+        pre_txs.push(input.previous_output.txid);
+      }
+    }
+
+    for input in &tx.input {
+      let buffer_result = self.outpoint_to_balances.get(&input.previous_output.store());
+      let mut i = 0;
+      let mut runes_balance: Vec<RuneBalance> = vec![];
+      if buffer_result.is_ok() {
+        if let Some(buffer) = buffer_result.unwrap() {
+          let buffer = buffer.value();
+          while i < buffer.len() {
+            let ((id, balance), len) = Index::decode_rune_balance(&buffer[i..]).unwrap();
+            i += len;
+            let balance = RuneBalance {
+              id,
+              balance,
+            };
+            runes_balance.push(balance);
+          }
+        }
+      }
+
+      if let Some(previous_tx) = tx_map.get(&input.previous_output.txid) {
+        let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
+        let rune_event_input = RuneEventOutput {
+          output: input.previous_output,
+          value: tx_out.value,
+          script_pubkey: tx_out.script_pubkey.clone(),
+          runes: runes_balance,
+        };
+        rune_event_inputs.push(rune_event_input);
+      }
+    }
+
     let mut etch = None;
     if let Some(runestone) = runestone.as_ref(){
       if let Some(e) = runestone.etching{
