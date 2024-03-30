@@ -1,11 +1,12 @@
 use super::*;
+use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
 struct Mint {
   id: RuneId,
   amount: u128,
 }
 
-struct Etched {
+pub(crate) struct Etched {
   divisibility: u8,
   id: RuneId,
   premine: u128,
@@ -28,11 +29,29 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
   pub(super) sequence_number_to_rune_id: &'a mut Table<'tx, u32, RuneIdValue>,
   pub(super) statistic_to_count: &'a mut Table<'tx, u64, u64>,
   pub(super) transaction_id_to_rune: &'a mut Table<'tx, &'static TxidValue, u128>,
+  pub(super) rune_event_catcher: RuneEventCatcher<'a, 'tx>,
 }
 
 impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
   pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid) -> Result<()> {
     let runestone = Runestone::from_transaction(tx);
+    println!("runestone");
+
+    //ubox event
+    let rune_event_inputs = self.rune_event_catcher.get_input_runes(tx);
+    let mut etch = None;
+    if let Some(runestone) = runestone.as_ref(){
+      if let Some(e) = runestone.etching{
+        etch = Some(ubox::runes::rune_event::Etch{
+          divisibility: e.divisibility,
+          premine: e.premine,
+          rune: e.rune,
+          spacers: e.spacers,
+          symbol: e.symbol,
+          terms: e.terms,
+        });
+      }
+    }
 
     let mut unallocated = self.unallocated(tx)?;
 
@@ -55,7 +74,6 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       }
 
       let etched = self.etched(tx_index, tx, &runestone)?;
-
       if let Some(Etched { id, premine, .. }) = etched {
         *unallocated.entry(id).or_default() += premine;
       }
@@ -170,6 +188,9 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       }
     }
 
+    // ubox event
+    let allocated_clone = allocated.clone();
+
     // update outpoint balances
     let mut buffer: Vec<u8> = Vec::new();
     for (vout, balances) in allocated.into_iter().enumerate() {
@@ -201,15 +222,21 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           txid,
           vout: vout.try_into().unwrap(),
         }
-        .store(),
+          .store(),
         buffer.as_slice(),
       )?;
     }
+
+    // ubox event
+    let burned_clone = burned.clone();
 
     // increment entries with burned runes
     for (id, amount) in burned {
       *self.burned.entry(id).or_default() += amount;
     }
+
+    // ubox event
+    self.rune_event_catcher.catch_event(txid, tx, etch, burned_clone, allocated_clone, rune_event_inputs)?;
 
     Ok(())
   }
@@ -261,7 +288,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         symbol,
         timestamp: self.block_time.into(),
       }
-      .store(),
+        .store(),
     )?;
 
     let inscription_id = InscriptionId { txid, index: 0 };
@@ -376,9 +403,9 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           .client
           .get_raw_transaction_info(&input.previous_output.txid, None)
           .into_option()?
-        else {
-          panic!("input not in UTXO set: {}", input.previous_output);
-        };
+          else {
+            panic!("input not in UTXO set: {}", input.previous_output);
+          };
 
         let taproot = tx_info.vout[input.previous_output.vout.into_usize()]
           .script_pub_key

@@ -3,6 +3,7 @@ use {
     accept_encoding::AcceptEncoding,
     accept_json::AcceptJson,
     error::{OptionExt, ServerError, ServerResult},
+    ubox_server::{UboxServer}
   },
   super::*,
   crate::templates::{
@@ -47,6 +48,7 @@ mod accept_json;
 mod error;
 pub(crate) mod query;
 mod server_config;
+mod ubox_server;
 
 enum SpawnConfig {
   Https(AxumAcceptor),
@@ -261,6 +263,8 @@ impl Server {
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
         .route("/update", get(Self::update))
+        // ubox event
+        .route("/rune/block/:block_hash/event", get(UboxServer::rune_block_events))
         .fallback(Self::fallback)
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))

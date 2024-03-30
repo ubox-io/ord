@@ -1,3 +1,4 @@
+use bitcoincore_rpc::bitcoincore_rpc_json::GetBlockResult;
 use {
   self::{
     entry::{
@@ -41,7 +42,7 @@ pub mod event;
 mod fetcher;
 mod reorg;
 mod rtx;
-mod updater;
+pub(crate) mod updater;
 
 #[cfg(test)]
 pub(crate) mod testing;
@@ -83,6 +84,9 @@ define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { TRANSACTION_ID_TO_RUNE, &TxidValue, u128 }
 define_table! { TRANSACTION_ID_TO_TRANSACTION, &TxidValue, &[u8] }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u32, u128 }
+// ubox event
+define_table! { TRANSACTION_ID_TO_RUNE_EVENT, &TxidValue, &[u8] }
+
 
 #[derive(Copy, Clone)]
 pub(crate) enum Statistic {
@@ -1055,6 +1059,29 @@ impl Index {
   pub(crate) fn get_block_by_hash(&self, hash: BlockHash) -> Result<Option<Block>> {
     self.client.get_block(&hash).into_option()
   }
+
+  // ubox event
+  pub(crate) fn get_block_info_by_hash(&self, hash: BlockHash) -> Result<Option<GetBlockResult>> {
+    self.client.get_block_info(&hash).into_option()
+  }
+
+  // ubox event
+  pub(crate) fn get_rune_event_by_txid(
+    &self,
+    txid: &Txid,
+  ) -> Result<Vec<ubox::runes::rune_event::RuneEvent>> {
+    let rtx = self.database.begin_read()?;
+    let tx_id_to_rune_event = rtx.open_table(TRANSACTION_ID_TO_RUNE_EVENT)?;
+
+    let events = if let Some(events_bytes) = tx_id_to_rune_event.get(&txid.store())? {
+      rmp_serde::from_slice::<Vec<ubox::runes::rune_event::RuneEvent>>(events_bytes.value())?
+    } else {
+      Vec::new()
+    };
+
+    Ok(events)
+  }
+
 
   pub(crate) fn get_collections_paginated(
     &self,

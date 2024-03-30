@@ -5,9 +5,10 @@ use {
   std::sync::mpsc,
   tokio::sync::mpsc::{error::TryRecvError, Receiver, Sender},
 };
+use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
 mod inscription_updater;
-mod rune_updater;
+pub(crate) mod rune_updater;
 
 pub(crate) struct BlockData {
   pub(crate) header: Header,
@@ -584,6 +585,10 @@ impl<'index> Updater<'index> {
       let mut rune_to_rune_id = wtx.open_table(RUNE_TO_RUNE_ID)?;
       let mut sequence_number_to_rune_id = wtx.open_table(SEQUENCE_NUMBER_TO_RUNE_ID)?;
       let mut transaction_id_to_rune = wtx.open_table(TRANSACTION_ID_TO_RUNE)?;
+      // ubox event
+      let mut transaction_id_to_rune_event = wtx.open_table(TRANSACTION_ID_TO_RUNE_EVENT)?;
+      let mut outpoint_to_rune_balances_ = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
+      let mut transaction_id_to_transaction_ = wtx.open_table(TRANSACTION_ID_TO_TRANSACTION)?;
 
       let runes = statistic_to_count
         .get(&Statistic::Runes.into())?
@@ -607,6 +612,11 @@ impl<'index> Updater<'index> {
         sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
         statistic_to_count: &mut statistic_to_count,
         transaction_id_to_rune: &mut transaction_id_to_rune,
+        rune_event_catcher: RuneEventCatcher {
+          transaction_id_to_rune_event: &mut transaction_id_to_rune_event,
+          outpoint_to_balances: &mut outpoint_to_rune_balances_,
+          transaction_id_to_transaction: &mut transaction_id_to_transaction_
+        }
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
