@@ -1069,17 +1069,15 @@ impl Index {
   pub(crate) fn get_rune_event_by_txid(
     &self,
     txid: &Txid,
-  ) -> Result<Vec<ubox::runes::rune_event::RuneEvent>> {
+  ) -> Result<ubox::runes::rune_event::RuneEvent, Error> {
     let rtx = self.database.begin_read()?;
     let tx_id_to_rune_event = rtx.open_table(TRANSACTION_ID_TO_RUNE_EVENT)?;
 
-    let events = if let Some(events_bytes) = tx_id_to_rune_event.get(&txid.store())? {
-      rmp_serde::from_slice::<Vec<ubox::runes::rune_event::RuneEvent>>(events_bytes.value())?
+    return if let Some(events_bytes) = tx_id_to_rune_event.get(&txid.store())? {
+      Ok(rmp_serde::from_slice::<ubox::runes::rune_event::RuneEvent>(events_bytes.value())?)
     } else {
-      Vec::new()
-    };
-
-    Ok(events)
+      Err(Error::msg("Not found"))
+    }
   }
 
 

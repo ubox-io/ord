@@ -1,16 +1,13 @@
 use std::collections::HashMap;
-use bitcoin::{OutPoint, ScriptBuf, Transaction, Txid, TxOut};
-use bitcoin::consensus::Decodable;
-use redb::{ReadableTable, Table};
-use crate::{Index, RuneId};
-use crate::index::entry::{Entry, OutPointValue};
+use bitcoin::{OutPoint, ScriptBuf, Transaction, Txid};
+use redb::{Table};
+use crate::{RuneId};
+use crate::index::entry::{Entry};
 use crate::{Result};
 use crate::ubox::runes::rune_event::{Etch, RuneBalance, RuneEvent, RuneEventOutput};
 
 pub(crate) struct RuneEventCatcher<'a, 'tx> {
   pub(crate) transaction_id_to_rune_event: &'a mut Table<'tx, &'static crate::index::entry::TxidValue, &'static [u8]>,
-  // pub(crate) outpoint_to_balances: &'a Table<'tx, &'static crate::index::entry::OutPointValue, &'static [u8]>,
-  // pub(crate) transaction_id_to_transaction: &'a Table<'tx, &'static crate::index::entry::TxidValue, &'static [u8]>,
 }
 
 impl RuneEventCatcher<'_, '_> {
@@ -44,7 +41,6 @@ impl RuneEventCatcher<'_, '_> {
     }
     if !inputs.is_empty() || !outputs.is_empty() || !burns.is_empty() || etch.is_some() {
       let event = RuneEvent { txid, inputs, outputs, etch, burns };
-      println!("catch event = {:?}", event);
       self.transaction_id_to_rune_event.insert(&txid.store(), rmp_serde::to_vec(&event).unwrap().as_slice())?;
     }
     return Ok(());

@@ -1,4 +1,3 @@
-use redb::AccessGuard;
 use crate::ubox::runes::rune_event::{RuneBalance, RuneEventOutput};
 use super::*;
 use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;

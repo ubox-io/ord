@@ -625,18 +625,15 @@ impl<'index> Updater<'index> {
           }
         }
         for txid in pre_txs {
-          let result = transaction_id_to_transaction.get(&txid.store());
-          if result.is_ok() {
-            let option = result.unwrap();
-            if let Some(previous_tx) = option {
-              if let Ok(tx) = Transaction::consensus_decode(&mut previous_tx.value()) {
-                tx_map.insert(txid, tx);
-              }
-            }
+          if txid == Txid::all_zeros() {
+            continue;
+          }
+          let transaction = self.index.get_transaction(txid)?;
+          if let Some(tx) = transaction {
+            tx_map.insert(txid, tx);
           }
         }
-
-        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid,tx_map)?;
+        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid, tx_map)?;
       }
 
       rune_updater.update()?;

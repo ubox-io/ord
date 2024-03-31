@@ -27,16 +27,9 @@ impl UboxServer {
       let mut events = vec![];
       if let Ok(block_opt) = index.get_block_info_by_hash(blockhash) {
         if let Some(block) = block_opt {
-          // 处理获取到的 block
           for txid in block.tx.iter() {
-            if let Ok(tx_events) = index.get_rune_event_by_txid(txid) {
-              for event in tx_events {
-                let txid_event = ubox::runes::rune_server::TxidEvent {
-                  txid: txid.clone(),
-                  event: event.clone(),
-                };
-                events.push(txid_event);
-              }
+            if let Ok(rune_event) = index.get_rune_event_by_txid(txid) {
+              events.push(rune_event);
             }
           }
         }
