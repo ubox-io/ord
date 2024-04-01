@@ -15,7 +15,9 @@ use {
     api, chain::Chain, outgoing::Outgoing, subcommand::runes::RuneInfo, wallet::batch,
     InscriptionId, RuneEntry,
   },
-  ordinals::{Charm, Edict, Pile, Rarity, Rune, RuneId, Runestone, Sat, SatPoint, SpacedRune},
+  ordinals::{
+    Artifact, Charm, Edict, Pile, Rarity, Rune, RuneId, Runestone, Sat, SatPoint, SpacedRune,
+  },
   pretty_assertions::assert_eq as pretty_assert_eq,
   regex::Regex,
   reqwest::{StatusCode, Url},
@@ -83,7 +85,8 @@ fn create_wallet(core: &mockcore::Handle, ord: &TestServer) {
   CommandBuilder::new(format!("--chain {} wallet create", core.network()))
     .core(core)
     .ord(ord)
-    .run_and_deserialize_output::<ord::subcommand::wallet::create::Output>();
+    .stdout_regex(".*")
+    .run_and_extract_stdout();
 }
 
 fn sats(
@@ -194,7 +197,10 @@ fn batch(core: &mockcore::Handle, ord: &TestServer, batchfile: batch::File) -> E
     .read_line(&mut buffer)
     .unwrap();
 
-  assert_eq!(buffer, "Waiting for rune commitment to mature…\n");
+  assert_regex_match!(
+    buffer,
+    "Waiting for rune commitment [[:xdigit:]]{64} to mature…\n"
+  );
 
   core.mine_blocks(6);
 

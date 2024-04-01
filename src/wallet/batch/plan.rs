@@ -80,6 +80,7 @@ impl Plan {
         commit_tx.txid(),
         Some(commit_psbt),
         reveal_tx.txid(),
+        false,
         Some(base64::engine::general_purpose::STANDARD.encode(reveal_psbt.serialize())),
         total_fees,
         self.inscriptions.clone(),
@@ -122,64 +123,53 @@ impl Plan {
       Self::backup_recovery_key(wallet, recovery_key_pair)?;
     }
 
-    let commit = wallet
+    let commit_txid = wallet
       .bitcoin_client()
       .send_raw_transaction(&signed_commit_tx)?;
 
-    if self.etching.is_some() {
-      eprintln!("Waiting for rune commitment to mature…");
+    if let Some(ref rune_info) = rune {
+      let commit = consensus::encode::deserialize::<Transaction>(&signed_commit_tx)?;
+      let reveal = consensus::encode::deserialize::<Transaction>(&signed_reveal_tx)?;
 
-      loop {
-        let transaction = wallet
-          .bitcoin_client()
-          .get_transaction(&commit_tx.txid(), Some(true))
-          .into_option()?;
-
-        if let Some(transaction) = transaction {
-          if u32::try_from(transaction.info.confirmations).unwrap()
-            < Runestone::COMMIT_INTERVAL.into()
-          {
-            continue;
-          }
-        }
-
-        let tx_out = wallet
-          .bitcoin_client()
-          .get_tx_out(&commit_tx.txid(), 0, Some(true))?;
-
-        if let Some(tx_out) = tx_out {
-          if tx_out.confirmations >= Runestone::COMMIT_INTERVAL.into() {
-            break;
-          }
-        }
-
-        if !wallet.integration_test() {
-          thread::sleep(Duration::from_secs(5));
-        }
-      }
-    }
-
-    let reveal = match wallet
-      .bitcoin_client()
-      .send_raw_transaction(&signed_reveal_tx)
-    {
-      Ok(txid) => txid,
-      Err(err) => {
-        return Err(anyhow!(
-        "Failed to send reveal transaction: {err}\nCommit tx {commit} will be recovered once mined"
+      Ok(Some(Box::new(wallet.wait_for_maturation(
+        &rune_info.rune.rune,
+        commit.clone(),
+        reveal.clone(),
+        self.output(
+          commit.txid(),
+          None,
+          reveal.txid(),
+          false,
+          None,
+          total_fees,
+          self.inscriptions.clone(),
+          rune.clone(),
+        ),
+      )?)))
+    } else {
+      let reveal = match wallet
+        .bitcoin_client()
+        .send_raw_transaction(&signed_reveal_tx)
+      {
+        Ok(txid) => txid,
+        Err(err) => {
+          return Err(anyhow!(
+        "Failed to send reveal transaction: {err}\nCommit tx {commit_txid} will be recovered once mined"
       ))
-      }
-    };
+        }
+      };
 
-    Ok(Some(Box::new(self.output(
-      commit,
-      None,
-      reveal,
-      None,
-      total_fees,
-      self.inscriptions.clone(),
-      rune,
-    ))))
+      Ok(Some(Box::new(self.output(
+        commit_txid,
+        None,
+        reveal,
+        true,
+        None,
+        total_fees,
+        self.inscriptions.clone(),
+        rune,
+      ))))
+    }
   }
 
   fn remove_witnesses(mut transaction: Transaction) -> Transaction {
@@ -195,6 +185,7 @@ impl Plan {
     commit: Txid,
     commit_psbt: Option<String>,
     reveal: Txid,
+    reveal_broadcast: bool,
     reveal_psbt: Option<String>,
     total_fees: u64,
     inscriptions: Vec<Inscription>,
@@ -253,6 +244,7 @@ impl Plan {
       inscriptions: inscriptions_output,
       parent: self.parent_info.clone().map(|info| info.id),
       reveal,
+      reveal_broadcast,
       reveal_psbt,
       rune,
       total_fees,
@@ -431,8 +423,6 @@ impl Plan {
     let runestone;
 
     if let Some(etching) = self.etching {
-      let mut edicts = Vec::new();
-
       let vout;
       let destination;
       premine = etching.premine.to_integer(etching.divisibility)?;
@@ -446,12 +436,6 @@ impl Plan {
           value: TARGET_POSTAGE.to_sat(),
         });
 
-        edicts.push(Edict {
-          id: RuneId::default(),
-          amount: premine,
-          output,
-        });
-
         vout = Some(output);
       } else {
         vout = None;
@@ -459,8 +443,7 @@ impl Plan {
       }
 
       let inner = Runestone {
-        cenotaph: 0,
-        edicts,
+        edicts: Vec::new(),
         etching: Some(ordinals::Etching {
           divisibility: (etching.divisibility > 0).then_some(etching.divisibility),
           terms: etching
@@ -486,7 +469,7 @@ impl Plan {
           symbol: Some(etching.symbol),
         }),
         mint: None,
-        pointer: None,
+        pointer: (premine > 0).then_some((reveal_outputs.len() - 1).try_into().unwrap()),
       };
 
       let script_pubkey = inner.encipher();
@@ -649,9 +632,10 @@ impl Plan {
     let total_fees =
       Self::calculate_fee(&unsigned_commit_tx, &utxos) + Self::calculate_fee(&reveal_tx, &utxos);
 
-    match (Runestone::from_transaction(&reveal_tx), runestone) {
+    match (Runestone::decipher(&reveal_tx).unwrap(), runestone) {
       (Some(actual), Some(expected)) => assert_eq!(
-        actual, expected,
+        actual,
+        Artifact::Runestone(expected),
         "commit transaction runestone did not match expected runestone"
       ),
       (Some(_), None) => panic!("commit transaction contained runestone, but none was expected"),

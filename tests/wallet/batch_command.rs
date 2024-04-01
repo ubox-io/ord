@@ -1,4 +1,4 @@
-use {super::*, ord::subcommand::wallet::send};
+use {super::*, ord::subcommand::wallet::send, pretty_assertions::assert_eq};
 
 fn receive(core: &mockcore::Handle, ord: &TestServer) -> Address {
   let address = CommandBuilder::new("wallet receive")
@@ -1411,7 +1411,7 @@ inscriptions:
 }
 
 #[test]
-fn batch_inscribe_can_etch_rune() {
+fn batch_can_etch_rune() {
   let core = mockcore::builder().network(Network::Regtest).build();
 
   let ord = TestServer::spawn_with_server_args(&core, &["--regtest", "--index-runes"], &[]);
@@ -1420,16 +1420,18 @@ fn batch_inscribe_can_etch_rune() {
 
   core.mine_blocks(1);
 
+  let rune = SpacedRune {
+    rune: Rune(RUNE),
+    spacers: 0,
+  };
+
   let batch = batch(
     &core,
     &ord,
     batch::File {
       etching: Some(batch::Etching {
         divisibility: 0,
-        rune: SpacedRune {
-          rune: Rune(RUNE),
-          spacers: 0,
-        },
+        rune,
         supply: "1000".parse().unwrap(),
         premine: "1000".parse().unwrap(),
         symbol: '¢',
@@ -1463,20 +1465,133 @@ fn batch_inscribe_can_etch_rune() {
     ),
   );
 
-  assert!(core.state().is_wallet_address(
-    &batch
-      .output
-      .rune
-      .unwrap()
-      .destination
-      .unwrap()
-      .require_network(Network::Regtest)
-      .unwrap()
-  ));
+  let destination = batch
+    .output
+    .rune
+    .unwrap()
+    .destination
+    .unwrap()
+    .require_network(Network::Regtest)
+    .unwrap();
+
+  assert!(core.state().is_wallet_address(&destination));
+
+  let reveal = core.tx_by_id(batch.output.reveal);
 
   assert_eq!(
-    core.tx_by_id(batch.output.reveal).input[0].sequence,
+    reveal.input[0].sequence,
     Sequence::from_height(Runestone::COMMIT_INTERVAL)
+  );
+
+  let Artifact::Runestone(runestone) = Runestone::decipher(&reveal).unwrap().unwrap() else {
+    panic!();
+  };
+
+  let pointer = reveal.output.len() - 2;
+
+  assert_eq!(runestone.pointer, Some(pointer.try_into().unwrap()));
+
+  assert_eq!(
+    reveal.output[pointer].script_pubkey,
+    destination.script_pubkey(),
+  );
+
+  assert_eq!(
+    CommandBuilder::new("--regtest wallet balance")
+      .core(&core)
+      .ord(&ord)
+      .run_and_deserialize_output::<Balance>(),
+    Balance {
+      cardinal: 44999980000,
+      ordinal: 10000,
+      runic: Some(10000),
+      runes: Some(vec![(rune, 1000)].into_iter().collect()),
+      total: 450 * COIN_VALUE,
+    }
+  );
+}
+
+#[test]
+fn batch_can_etch_rune_without_premine() {
+  let core = mockcore::builder().network(Network::Regtest).build();
+
+  let ord = TestServer::spawn_with_server_args(&core, &["--regtest", "--index-runes"], &[]);
+
+  create_wallet(&core, &ord);
+
+  core.mine_blocks(1);
+
+  let rune = SpacedRune {
+    rune: Rune(RUNE),
+    spacers: 0,
+  };
+
+  let batch = batch(
+    &core,
+    &ord,
+    batch::File {
+      etching: Some(batch::Etching {
+        divisibility: 0,
+        rune,
+        supply: "1000".parse().unwrap(),
+        premine: "0".parse().unwrap(),
+        symbol: '¢',
+        terms: Some(batch::Terms {
+          cap: 1,
+          amount: "1000".parse().unwrap(),
+          height: None,
+          offset: None,
+        }),
+      }),
+      inscriptions: vec![batch::Entry {
+        file: "inscription.jpeg".into(),
+        ..default()
+      }],
+      ..default()
+    },
+  );
+
+  let parent = batch.output.inscriptions[0].id;
+
+  let request = ord.request(format!("/content/{parent}"));
+
+  assert_eq!(request.status(), 200);
+  assert_eq!(request.headers().get("content-type").unwrap(), "image/jpeg");
+  assert_eq!(request.text().unwrap(), "inscription");
+
+  ord.assert_response_regex(
+    format!("/inscription/{parent}"),
+    r".*<dt>rune</dt>\s*<dd><a href=/rune/AAAAAAAAAAAAA>AAAAAAAAAAAAA</a></dd>.*",
+  );
+
+  ord.assert_response_regex(
+    "/rune/AAAAAAAAAAAAA",
+    format!(
+      r".*<dt>parent</dt>\s*<dd><a class=monospace href=/inscription/{parent}>{parent}</a></dd>.*"
+    ),
+  );
+
+  assert_eq!(batch.output.rune.unwrap().destination, None);
+
+  let reveal = core.tx_by_id(batch.output.reveal);
+
+  assert_eq!(
+    reveal.input[0].sequence,
+    Sequence::from_height(Runestone::COMMIT_INTERVAL)
+  );
+
+  assert_eq!(
+    CommandBuilder::new("--regtest wallet balance")
+      .core(&core)
+      .ord(&ord)
+      .run_and_deserialize_output::<Balance>(),
+    Balance {
+      cardinal: 44999990000,
+      ordinal: 10000,
+      runic: Some(0),
+      runes: Some(default()),
+      total: 450 * COIN_VALUE,
+    }
   );
 }
 
@@ -2358,7 +2473,7 @@ fn oversize_runestone_error() {
     )
     .core(&core)
     .ord(&ord)
-    .expected_stderr("error: runestone greater than maximum OP_RETURN size: 125 > 82\n")
+    .expected_stderr("error: runestone greater than maximum OP_RETURN size: 104 > 82\n")
     .expected_exit_code(1)
     .run_and_extract_stdout();
 }
@@ -2413,4 +2528,96 @@ fn oversize_runestones_are_allowed_with_no_limit() {
   .core(&core)
   .ord(&ord)
   .run_and_deserialize_output::<Batch>();
+}
+
+#[cfg(unix)]
+#[test]
+fn batch_inscribe_errors_if_pending_etchings() {
+  use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
+  };
+
+  let core = mockcore::builder().network(Network::Regtest).build();
+
+  let ord = TestServer::spawn_with_server_args(&core, &["--regtest", "--index-runes"], &[]);
+
+  create_wallet(&core, &ord);
+
+  core.mine_blocks(1);
+
+  let batchfile = batch::File {
+    etching: Some(batch::Etching {
+      divisibility: 0,
+      rune: SpacedRune {
+        rune: Rune(RUNE),
+        spacers: 0,
+      },
+      supply: "1000".parse().unwrap(),
+      premine: "1000".parse().unwrap(),
+      symbol: '¢',
+      ..default()
+    }),
+    inscriptions: vec![batch::Entry {
+      file: "inscription.jpeg".into(),
+      ..default()
+    }],
+    ..default()
+  };
+
+  let tempdir = Arc::new(TempDir::new().unwrap());
+
+  {
+    let mut spawn =
+      CommandBuilder::new("--regtest --index-runes wallet batch --fee-rate 0 --batch batch.yaml")
+        .temp_dir(tempdir.clone())
+        .write("batch.yaml", serde_yaml::to_string(&batchfile).unwrap())
+        .write("inscription.jpeg", "inscription")
+        .core(&core)
+        .ord(&ord)
+        .expected_exit_code(1)
+        .spawn();
+
+    let mut buffer = String::new();
+
+    BufReader::new(spawn.child.stderr.as_mut().unwrap())
+      .read_line(&mut buffer)
+      .unwrap();
+
+    assert_regex_match!(
+      buffer,
+      "Waiting for rune commitment [[:xdigit:]]{64} to mature…\n"
+    );
+
+    core.mine_blocks(1);
+
+    signal::kill(
+      Pid::from_raw(spawn.child.id().try_into().unwrap()),
+      Signal::SIGINT,
+    )
+    .unwrap();
+
+    buffer.clear();
+
+    BufReader::new(spawn.child.stderr.as_mut().unwrap())
+      .read_line(&mut buffer)
+      .unwrap();
+
+    assert_eq!(
+      buffer,
+      "Shutting down gracefully. Press <CTRL-C> again to shutdown immediately.\n"
+    );
+
+    spawn.child.wait().unwrap();
+  }
+
+  CommandBuilder::new("--regtest --index-runes wallet batch --fee-rate 0 --batch batch.yaml")
+    .temp_dir(tempdir)
+    .core(&core)
+    .ord(&ord)
+    .expected_exit_code(1)
+    .expected_stderr(
+      "error: rune `AAAAAAAAAAAAA` has pending etching, resume with `ord wallet resume`\n",
+    )
+    .run_and_extract_stdout();
 }
