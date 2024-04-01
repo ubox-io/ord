@@ -58,6 +58,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           output: input.previous_output,
           value: tx_out.value,
           script_pubkey: tx_out.script_pubkey.clone(),
+          address: None,
           runes: runes_balance,
         };
         rune_event_inputs.push(rune_event_input);

@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use ordinals::{Rune, SpacedRune};
 
 
-
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct RuneEvent {
   pub txid: Txid,
@@ -44,6 +43,7 @@ pub struct RuneEventOutput {
   pub output: OutPoint,
   pub value: u64,
   pub script_pubkey: ScriptBuf,
+  pub address: Option<String>,
   pub runes: Vec<RuneBalance>,
 }
 

@@ -36,6 +36,7 @@ impl RuneEventCatcher<'_, '_> {
           output: OutPoint { txid, vout: vout as u32 },
           value: *&tx_output.value,
           script_pubkey: ScriptBuf::from_hex(&tx_output.script_pubkey.to_hex_string()).unwrap(),
+          address: None,
           runes: runes_balance,
         })
       }

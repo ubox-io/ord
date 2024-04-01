@@ -6,6 +6,7 @@ use bitcoin::{BlockHash};
 use tokio::task;
 use crate::subcommand::server::error::{ServerError, ServerResult};
 use crate::{Index, ubox};
+use crate::templates::ServerConfig;
 
 
 // ubox event
@@ -13,6 +14,7 @@ pub(crate) struct UboxServer {}
 
 impl UboxServer {
   pub(crate) async fn rune_block_events(
+    Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Path(block_hash): Path<String>,
   ) -> ServerResult<Json<ubox::runes::rune_server::RuneBlockEvents>> {
@@ -28,7 +30,19 @@ impl UboxServer {
       if let Ok(block_opt) = index.get_block_info_by_hash(blockhash) {
         if let Some(block) = block_opt {
           for txid in block.tx.iter() {
-            if let Ok(rune_event) = index.get_rune_event_by_txid(txid) {
+            if let Ok(mut rune_event) = index.get_rune_event_by_txid(txid) {
+              for x in &mut rune_event.outputs {
+                let address = server_config.chain
+                  .address_from_script(&x.script_pubkey)
+                  .ok();
+                x.address = Some(address.unwrap().to_string());
+              }
+              for x in &mut rune_event.inputs {
+                let address = server_config.chain
+                  .address_from_script(&x.script_pubkey)
+                  .ok();
+                x.address = Some(address.unwrap().to_string());
+              }
               events.push(rune_event);
             }
           }
