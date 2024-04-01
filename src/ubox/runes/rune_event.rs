@@ -1,7 +1,7 @@
 use bitcoin::{OutPoint, ScriptBuf, Txid};
 use crate::{RuneId};
 use serde::{Deserialize, Serialize};
-use ordinals::{Rune, Terms};
+use ordinals::{Rune, SpacedRune};
 
 
 
@@ -15,10 +15,25 @@ pub struct RuneEvent {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Copy, Clone, Eq)]
+pub struct Terms {
+  pub amount: Option<u128>,
+  pub cap: Option<u128>,
+  pub start_height: Option<u64>,
+  pub end_height: Option<u64>,
+  pub start_offset: Option<u64>,
+  pub end_offset: Option<u64>,
+  pub abs_start_height: Option<u64>,
+  pub abs_end_height: Option<u64>,
+}
+
+
+#[derive(Default, Serialize, Deserialize, Debug, PartialEq, Clone, Eq)]
 pub struct Etch {
+  pub rune_id: Option<RuneId>,
+  pub rune: Option<Rune>,
+  pub spacer_rune: Option<SpacedRune>,
   pub divisibility: Option<u8>,
   pub premine: Option<u128>,
-  pub rune: Option<Rune>,
   pub spacers: Option<u32>,
   pub symbol: Option<char>,
   pub terms: Option<Terms>,
