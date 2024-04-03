@@ -264,8 +264,9 @@ impl Server {
         .route("/tx/:txid", get(Self::transaction))
         .route("/update", get(Self::update))
         // ubox event
-        .route("/rune/block/:block_hash/event", get(UboxServer::rune_block_events))
+        .route("/api/rune/block/:block_hash/event", get(UboxServer::rune_block_events))
         .route("/api/output/:output", get(Self::output_api))
+        .route("/api/current_block", get(Self::current_block))
 
         .fallback(Self::fallback)
         .layer(Extension(index))
@@ -650,6 +651,7 @@ impl Server {
     })
   }
 
+  // ubox api
   async fn output_api(
     Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
@@ -704,6 +706,16 @@ impl Server {
         spent,
       ))
         .into_response())
+    })
+  }
+
+  // ubox api
+  async fn current_block(
+    Extension(index): Extension<Arc<Index>>,
+  ) -> ServerResult {
+    task::block_in_place(|| {
+      let current_block = index.current_block();
+      Ok(Json(current_block.unwrap()).into_response())
     })
   }
 

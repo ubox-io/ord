@@ -834,6 +834,22 @@ impl Index {
     Ok(blocks)
   }
 
+  // ubox api
+  pub(crate) fn current_block(&self) -> Result<u32> {
+    let rtx = self.begin_read()?;
+
+    let height_to_block_header = rtx.0.open_table(HEIGHT_TO_BLOCK_HEADER)?;
+    let current = height_to_block_header
+      .range(0..)?
+      .next_back()
+      .transpose()?
+      .map(|(height, _header)| height)
+      .map(|x| x.value())
+      .unwrap_or(0);
+
+    Ok(current)
+  }
+
   pub(crate) fn rare_sat_satpoints(&self) -> Result<Vec<(Sat, SatPoint)>> {
     let rtx = self.database.begin_read()?;
 
