@@ -981,6 +981,46 @@ impl Index {
     Ok(balances)
   }
 
+  pub(crate) fn get_rune_detail_balances_for_outpoint(
+    &self,
+    outpoint: OutPoint,
+  ) -> Result<Vec<(SpacedRune, Pile, RuneId, u64, Rune)>> {
+    let rtx = self.database.begin_read()?;
+
+    let outpoint_to_balances = rtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
+
+    let id_to_rune_entries = rtx.open_table(RUNE_ID_TO_RUNE_ENTRY)?;
+
+    let Some(balances) = outpoint_to_balances.get(&outpoint.store())? else {
+      return Ok(Vec::new());
+    };
+
+    let balances_buffer = balances.value();
+
+    let mut balances = Vec::new();
+    let mut i = 0;
+    while i < balances_buffer.len() {
+      let ((id, amount), length) = Index::decode_rune_balance(&balances_buffer[i..]).unwrap();
+      i += length;
+
+      let entry = RuneEntry::load(id_to_rune_entries.get(id.store())?.unwrap().value());
+
+      balances.push((
+        entry.spaced_rune,
+        Pile {
+          amount,
+          divisibility: entry.divisibility,
+          symbol: entry.symbol,
+        },
+        id,
+        entry.number,
+        entry.spaced_rune.rune,
+      ));
+    }
+
+    Ok(balances)
+  }
+
   pub(crate) fn get_rune_balance_map(
     &self,
   ) -> Result<BTreeMap<SpacedRune, BTreeMap<OutPoint, Pile>>> {

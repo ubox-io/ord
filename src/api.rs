@@ -159,6 +159,48 @@ impl Output {
   }
 }
 
+// ubox event
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct ApiOutput {
+  pub address: Option<Address<NetworkUnchecked>>,
+  pub indexed: bool,
+  pub inscriptions: Vec<InscriptionId>,
+  pub runes: Vec<(SpacedRune, Pile, RuneId, u64, ordinals::Rune)>,
+  pub sat_ranges: Option<Vec<(u64, u64)>>,
+  pub script_pubkey: String,
+  pub spent: bool,
+  pub transaction: String,
+  pub value: u64,
+}
+
+impl crate::api::ApiOutput {
+  pub fn new(
+    chain: Chain,
+    inscriptions: Vec<InscriptionId>,
+    outpoint: OutPoint,
+    output: TxOut,
+    indexed: bool,
+    runes: Vec<(SpacedRune, Pile, RuneId, u64, ordinals::Rune)>,
+    sat_ranges: Option<Vec<(u64, u64)>>,
+    spent: bool,
+  ) -> Self {
+    Self {
+      address: chain
+        .address_from_script(&output.script_pubkey)
+        .ok()
+        .map(|address| uncheck(&address)),
+      indexed,
+      inscriptions,
+      runes,
+      sat_ranges,
+      script_pubkey: output.script_pubkey.to_asm_string(),
+      spent,
+      transaction: outpoint.txid.to_string(),
+      value: output.value,
+    }
+  }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Sat {
   pub block: u32,
