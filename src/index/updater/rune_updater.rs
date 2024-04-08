@@ -1,6 +1,8 @@
 use crate::ubox::runes::rune_event::{RuneBalance, RuneEventOutput};
 use super::*;
 use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
+use std::time::{Instant};
+
 
 
 pub(super) struct RuneUpdater<'a, 'tx, 'client> {
@@ -22,7 +24,13 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
 
 impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
   pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid, tx_map: HashMap<Txid, Transaction>) -> Result<()> {
+    let start_time = Instant::now();
+
     let artifact = Runestone::decipher(tx);
+
+    let decipher_duration = start_time.elapsed();
+    println!("decipher_duration use time ：{:?}", decipher_duration);
+
 
     //ubox event
     let mut rune_event_inputs: Vec<RuneEventOutput> = vec![];
@@ -115,6 +123,8 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         }
       }
     }
+    let uboxevent_duration = start_time.elapsed();
+    println!("uboxevent_duration use time ：{:?}", uboxevent_duration);
 
     let mut unallocated = self.unallocated(tx)?;
 
@@ -300,10 +310,13 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     for (id, amount) in burned {
       *self.burned.entry(id).or_default() += amount;
     }
+    let run_updater_duration = start_time.elapsed();
+    println!("run_updater_duration use time ：{:?}", run_updater_duration);
 
     // ubox event
     self.rune_event_catcher.catch_event(txid, tx, etch, burned_clone, allocated_clone, rune_event_inputs)?;
-
+    let ubox_event_save_duration = start_time.elapsed();
+    println!("ubox_event_save_duration use time ：{:?}", ubox_event_save_duration);
     Ok(())
   }
 
