@@ -59,17 +59,18 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           }
         }
       }
-
-      if let Some(previous_tx) = tx_map.get(&input.previous_output.txid) {
-        let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
-        let rune_event_input = RuneEventOutput {
-          output: input.previous_output,
-          value: tx_out.value,
-          script_pubkey: tx_out.script_pubkey.clone(),
-          address: None,
-          runes: runes_balance,
-        };
-        rune_event_inputs.push(rune_event_input);
+      if !runes_balance.is_empty() {
+        if let Some(previous_tx) = tx_map.get(&input.previous_output.txid) {
+          let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
+          let rune_event_input = RuneEventOutput {
+            output: input.previous_output,
+            value: tx_out.value,
+            script_pubkey: tx_out.script_pubkey.clone(),
+            address: None,
+            runes: runes_balance,
+          };
+          rune_event_inputs.push(rune_event_input);
+        }
       }
     }
 
