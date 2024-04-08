@@ -3,7 +3,6 @@ use super::*;
 use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
 
-
 pub(super) struct RuneUpdater<'a, 'tx, 'client> {
   pub(super) block_time: u32,
   pub(super) burned: HashMap<RuneId, Lot>,
@@ -54,7 +53,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         }
       }
       if !runes_balance.is_empty() {
-        if let Ok(previous_tx) = self.index.get_transaction(input.previous_output.txid){
+        if let Ok(previous_tx) = self.index.get_transaction(input.previous_output.txid) {
           if let Some(previous_tx) = previous_tx {
             let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
             let rune_event_input = RuneEventOutput {
@@ -108,16 +107,18 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
             });
           };
           if let Some(rune) = e.rune {
-            etch = Some(ubox::runes::rune_event::Etch {
-              rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
-              rune: Some(rune),
-              spacers: e.spacers,
-              spacer_rune: Some(SpacedRune { rune, spacers: e.spacers.unwrap() }),
-              divisibility: e.divisibility,
-              premine: e.premine,
-              symbol: e.symbol,
-              terms,
-            });
+            if let Some(spacers) = e.spacers {
+              etch = Some(ubox::runes::rune_event::Etch {
+                rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
+                rune: Some(rune),
+                spacers: Some(spacers),
+                spacer_rune: Some(SpacedRune { rune, spacers }),
+                divisibility: e.divisibility,
+                premine: e.premine,
+                symbol: e.symbol,
+                terms,
+              });
+            }
           }
         }
       }
