@@ -612,28 +612,12 @@ impl<'index> Updater<'index> {
         transaction_id_to_rune: &mut transaction_id_to_rune,
         rune_event_catcher: RuneEventCatcher {
           transaction_id_to_rune_event: &mut transaction_id_to_rune_event,
-        }
+        },
+        index:self.index
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
-        // ubox event
-        let mut tx_map: HashMap<Txid, Transaction> = HashMap::new();
-        let mut pre_txs: Vec<Txid> = vec![];
-        for input in &tx.input {
-          if !pre_txs.contains(&input.previous_output.txid) {
-            pre_txs.push(input.previous_output.txid);
-          }
-        }
-        for txid in pre_txs {
-          if txid == Txid::all_zeros() {
-            continue;
-          }
-          let transaction = self.index.get_transaction(txid)?;
-          if let Some(tx) = transaction {
-            tx_map.insert(txid, tx);
-          }
-        }
-        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid, tx_map)?;
+        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
       }
 
       rune_updater.update()?;

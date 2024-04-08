@@ -19,10 +19,11 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
   pub(super) statistic_to_count: &'a mut Table<'tx, u64, u64>,
   pub(super) transaction_id_to_rune: &'a mut Table<'tx, &'static TxidValue, u128>,
   pub(super) rune_event_catcher: RuneEventCatcher<'a, 'tx>,
+  pub(super) index: &'client Index,
 }
 
 impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
-  pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid, tx_map: HashMap<Txid, Transaction>) -> Result<()> {
+  pub(super) fn index_runes(&mut self, tx_index: u32, tx: &Transaction, txid: Txid) -> Result<()> {
     let artifact = Runestone::decipher(tx);
 
     //ubox event
@@ -53,16 +54,18 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         }
       }
       if !runes_balance.is_empty() {
-        if let Some(previous_tx) = tx_map.get(&input.previous_output.txid) {
-          let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
-          let rune_event_input = RuneEventOutput {
-            output: input.previous_output,
-            value: tx_out.value,
-            script_pubkey: tx_out.script_pubkey.clone(),
-            address: None,
-            runes: runes_balance,
-          };
-          rune_event_inputs.push(rune_event_input);
+        if let Ok(previous_tx) = self.index.get_transaction(input.previous_output.txid){
+          if let Some(previous_tx) = previous_tx {
+            let tx_out: &TxOut = &previous_tx.output[input.previous_output.vout as usize];
+            let rune_event_input = RuneEventOutput {
+              output: input.previous_output,
+              value: tx_out.value,
+              script_pubkey: tx_out.script_pubkey.clone(),
+              address: None,
+              runes: runes_balance,
+            };
+            rune_event_inputs.push(rune_event_input);
+          }
         }
       }
     }
