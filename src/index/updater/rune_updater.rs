@@ -107,16 +107,18 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
               abs_end_height,
             });
           };
-          etch = Some(ubox::runes::rune_event::Etch {
-            rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
-            rune: e.rune,
-            spacers: e.spacers,
-            spacer_rune: Some(SpacedRune { rune: e.rune.unwrap(), spacers: e.spacers.unwrap() }),
-            divisibility: e.divisibility,
-            premine: e.premine,
-            symbol: e.symbol,
-            terms,
-          });
+          if let Some(rune) = e.rune {
+            etch = Some(ubox::runes::rune_event::Etch {
+              rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
+              rune: Some(rune),
+              spacers: e.spacers,
+              spacer_rune: Some(SpacedRune { rune, spacers: e.spacers.unwrap() }),
+              divisibility: e.divisibility,
+              premine: e.premine,
+              symbol: e.symbol,
+              terms,
+            });
+          }
         }
       }
     }
