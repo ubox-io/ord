@@ -49,6 +49,7 @@ impl RuneEventCatcher<'_, '_> {
     println!("rune_event_catcher.allocated_duration use time ：{:?}", allocated_duration);
     if !inputs.is_empty() || !outputs.is_empty() || !burns.is_empty() || etch.is_some() {
       let event = RuneEvent { txid, inputs, outputs, etch, burns };
+      println!("rune_event_catcher.event {:?}",event);
       self.transaction_id_to_rune_event.insert(&txid.store(), rmp_serde::to_vec(&event).unwrap().as_slice())?;
     }
     let save_duration = start_time.elapsed();
