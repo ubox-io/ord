@@ -91,7 +91,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
             if end_offset.is_some() {
               abs_end_height = Some(end_offset.unwrap() + height);
             }
-            if end_height.is_some() && end_height.unwrap() < abs_end_height.unwrap() {
+            if end_height.is_some() && (abs_end_height.is_none() || end_height.unwrap() < abs_end_height.unwrap()) {
               abs_end_height = end_height;
             }
 
