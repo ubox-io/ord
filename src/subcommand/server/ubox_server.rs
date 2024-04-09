@@ -38,7 +38,7 @@ impl UboxServer {
                 if let Some(address) = address{
                   x.address = Some(address.unwrap().to_string());
                 }else {
-                  x.address = Some("noStandard".parse().unwrap());
+                  x.address = Some("noStandard".to_string());
                 }
 
               }
