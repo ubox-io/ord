@@ -1,4 +1,4 @@
-use crate::ubox::runes::rune_event::{RuneBalance, RuneEventOutput};
+use crate::ubox::runes::rune_event::{RuneBalance, RuneEventOutput, RuneMint};
 use super::*;
 use crate::ubox::runes::rune_event_catcher::RuneEventCatcher;
 
@@ -70,6 +70,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     }
 
     let mut etch = None;
+    let mut rune_mint = None;
     if let Some(artifact) = &artifact {
       if let Artifact::Runestone(runestone) = artifact {
         if let Some(e) = runestone.etching {
@@ -140,6 +141,8 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       if let Some(id) = artifact.mint() {
         if let Some(amount) = self.mint(id)? {
           *unallocated.entry(id).or_default() += amount;
+          // ubox event
+          rune_mint = Some(RuneMint { id, amount: amount.0 })
         }
       }
 
@@ -318,7 +321,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     }
 
     // ubox event
-    self.rune_event_catcher.catch_event(txid, tx, etch, burned_clone, allocated_clone, rune_event_inputs)?;
+    self.rune_event_catcher.catch_event(txid, tx, etch, rune_mint, burned_clone, allocated_clone, rune_event_inputs)?;
     Ok(())
   }
 

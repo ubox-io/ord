@@ -5,14 +5,14 @@ use crate::{RuneId};
 use crate::index::entry::{Entry};
 use crate::{Result};
 use crate::index::{lot::Lot};
-use crate::ubox::runes::rune_event::{Etch, RuneBalance, RuneEvent, RuneEventOutput};
+use crate::ubox::runes::rune_event::{Etch, RuneBalance, RuneEvent, RuneEventOutput, RuneMint};
 
 pub(crate) struct RuneEventCatcher<'a, 'tx> {
   pub(crate) transaction_id_to_rune_event: &'a mut Table<'tx, &'static crate::index::entry::TxidValue, &'static [u8]>,
 }
 
 impl RuneEventCatcher<'_, '_> {
-  pub(crate) fn catch_event(&mut self, txid: Txid, tx: &Transaction, etch: Option<Etch>, burned: HashMap<RuneId, Lot>, allocated: Vec<HashMap<RuneId, Lot>>, inputs: Vec<RuneEventOutput>) -> Result<()> {
+  pub(crate) fn catch_event(&mut self, txid: Txid, tx: &Transaction, etch: Option<Etch>, mint: Option<RuneMint>, burned: HashMap<RuneId, Lot>, allocated: Vec<HashMap<RuneId, Lot>>, inputs: Vec<RuneEventOutput>) -> Result<()> {
     let mut outputs: Vec<RuneEventOutput> = vec![];
     let mut burns: Vec<RuneBalance> = vec![];
     for (id, amount) in burned {
@@ -41,8 +41,8 @@ impl RuneEventCatcher<'_, '_> {
         })
       }
     }
-    if !inputs.is_empty() || !outputs.is_empty() || !burns.is_empty() || etch.is_some() {
-      let event = RuneEvent { txid, inputs, outputs, etch, burns };
+    if !inputs.is_empty() || !outputs.is_empty() || !burns.is_empty() || etch.is_some() || mint.is_some() {
+      let event = RuneEvent { txid, inputs, outputs, etch, mint, burns };
       self.transaction_id_to_rune_event.insert(&txid.store(), rmp_serde::to_vec(&event).unwrap().as_slice())?;
     }
     return Ok(());

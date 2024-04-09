@@ -237,6 +237,7 @@ impl Index {
     }
 
     let index_cache_size = settings.index_cache_size();
+    println!("index_cache_size={}",index_cache_size);
 
     log::info!("Setting index cache size to {} bytes", index_cache_size);
 

@@ -10,6 +10,7 @@ pub struct RuneEvent {
   pub inputs: Vec<RuneEventOutput>,
   pub outputs: Vec<RuneEventOutput>,
   pub etch: Option<Etch>,
+  pub mint: Option<RuneMint>,
   pub burns: Vec<RuneBalance>,
 }
 
@@ -52,5 +53,12 @@ pub struct RuneBalance {
   pub id: RuneId,
   pub balance: u128,
 }
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct RuneMint {
+  pub id: RuneId,
+  pub amount: u128,
+}
+
 
 
