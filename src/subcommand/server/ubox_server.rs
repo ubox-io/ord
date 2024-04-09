@@ -36,7 +36,7 @@ impl UboxServer {
                   .address_from_script(&x.script_pubkey)
                   .ok();
                 if let Some(address) = address{
-                  x.address = Some(address.unwrap().to_string());
+                  x.address = Some(address.to_string());
                 }else {
                   x.address = Some("noStandard".to_string());
                 }
