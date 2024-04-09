@@ -4,7 +4,7 @@ use axum::{Extension, Json};
 use axum::extract::Path;
 use bitcoin::{BlockHash};
 use tokio::task;
-use crate::subcommand::server::error::{ServerError, ServerResult};
+use crate::subcommand::server::error::{ServerResult};
 use crate::{Index, ubox};
 use crate::templates::ServerConfig;
 
