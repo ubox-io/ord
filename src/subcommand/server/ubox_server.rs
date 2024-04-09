@@ -4,9 +4,9 @@ use axum::{Extension, Json};
 use axum::extract::Path;
 use bitcoin::{BlockHash};
 use tokio::task;
-use crate::subcommand::server::error::{ServerResult};
-use crate::{Index, ubox};
+use crate::{Index};
 use crate::templates::ServerConfig;
+use crate::ubox::runes::rune_server::RuneBlockEvents;
 
 
 // ubox event
@@ -17,13 +17,29 @@ impl UboxServer {
     Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Path(block_hash): Path<String>,
-  ) -> ServerResult<Json<ubox::runes::rune_server::RuneBlockEvents>> {
+  ) -> Result<Json<RuneBlockEvents>, &'static str> {
     task::block_in_place(|| {
       let blockhash = BlockHash::from_str(&block_hash).unwrap();
 
       let mut events = vec![];
       if let Ok(block_opt) = index.get_block_info_by_hash(blockhash) {
         if let Some(block) = block_opt {
+          // get blockhash from redb.
+          let blockhash = index
+            .block_hash(Some(u32::try_from(block.height).unwrap()));
+
+          if let Ok(blockhash) = blockhash {
+            if let Some(blockhash) = blockhash {
+              if block.hash != blockhash {
+                return Err("Block not found");
+              }
+            } else {
+              return Err("Not sync to this block");
+            }
+          } else {
+            return Err("Not sync to this block");
+          }
+
           for txid in block.tx.iter() {
             if let Ok(mut rune_event) = index.get_rune_event_by_txid(txid) {
               for x in &mut rune_event.outputs {
@@ -49,10 +65,14 @@ impl UboxServer {
               events.push(rune_event);
             }
           }
+        } else {
+          return Err("Block not found");
         }
+      } else {
+        return Err("Block not found");
       }
 
-      Ok(Json(ubox::runes::rune_server::RuneBlockEvents { events, blockhash: block_hash }))
+      Ok(Json(RuneBlockEvents { events, blockhash: block_hash }))
     })
   }
 }
