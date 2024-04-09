@@ -19,11 +19,6 @@ impl UboxServer {
     Path(block_hash): Path<String>,
   ) -> ServerResult<Json<ubox::runes::rune_server::RuneBlockEvents>> {
     task::block_in_place(|| {
-      if !index.has_sat_index() {
-        return Err(ServerError::NotFound(
-          "this server has no sat index".to_string(),
-        ));
-      }
       let blockhash = BlockHash::from_str(&block_hash).unwrap();
 
       let mut events = vec![];
