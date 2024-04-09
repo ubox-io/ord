@@ -35,18 +35,21 @@ impl UboxServer {
                 let address = server_config.chain
                   .address_from_script(&x.script_pubkey)
                   .ok();
-                if let Some(address) = address{
+                if let Some(address) = address {
                   x.address = Some(address.to_string());
-                }else {
+                } else {
                   x.address = Some("noStandard".to_string());
                 }
-
               }
               for x in &mut rune_event.inputs {
                 let address = server_config.chain
                   .address_from_script(&x.script_pubkey)
                   .ok();
-                x.address = Some(address.unwrap().to_string());
+                if let Some(address) = address {
+                  x.address = Some(address.to_string());
+                } else {
+                  x.address = Some("noStandard".to_string());
+                }
               }
               events.push(rune_event);
             }
