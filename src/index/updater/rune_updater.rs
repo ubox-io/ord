@@ -69,69 +69,9 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       }
     }
 
+    // ubox event
     let mut etch = None;
     let mut rune_mint = None;
-    if let Some(artifact) = &artifact {
-      if let Artifact::Runestone(runestone) = artifact {
-        if let Some(e) = runestone.etching {
-          if let Some(rune) = e.rune {
-            if rune < self.minimum
-              || rune.is_reserved()
-              || self.rune_to_id.get(rune.0)?.is_some()
-              || !self.tx_commits_to_rune(tx, rune)?
-            {} else {
-              let mut terms = None;
-              let height = self.height as u64;
-              if let Some(t) = e.terms {
-                let start_height = t.height.0;
-                let end_height = t.height.1;
-                let start_offset = t.offset.0;
-                let end_offset = t.offset.1;
-                let mut abs_start_height = Some(height);
-                let mut abs_end_height = None;
-                if start_height.is_some() && start_height.unwrap() > abs_start_height.unwrap() {
-                  abs_start_height = start_height;
-                }
-                if start_offset.is_some() && start_offset.unwrap() + height > abs_start_height.unwrap() {
-                  abs_start_height = Some(start_offset.unwrap() + height);
-                }
-                if end_offset.is_some() {
-                  abs_end_height = Some(end_offset.unwrap() + height);
-                }
-                if end_height.is_some() && (abs_end_height.is_none() || end_height.unwrap() < abs_end_height.unwrap()) {
-                  abs_end_height = end_height;
-                }
-
-                terms = Some(ubox::runes::rune_event::Terms {
-                  amount: t.amount,
-                  cap: t.cap,
-                  start_height,
-                  end_height,
-                  start_offset,
-                  end_offset,
-                  abs_start_height,
-                  abs_end_height,
-                });
-              };
-              if let Some(rune) = e.rune {
-                if let Some(spacers) = e.spacers {
-                  etch = Some(ubox::runes::rune_event::Etch {
-                    rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
-                    rune: Some(rune),
-                    spacers: Some(spacers),
-                    spacer_rune: Some(SpacedRune { rune, spacers }),
-                    divisibility: e.divisibility,
-                    premine: e.premine,
-                    symbol: e.symbol,
-                    terms,
-                  });
-                }
-              }
-            }
-          };
-        }
-      }
-    }
 
     let mut unallocated = self.unallocated(tx)?;
 
@@ -227,7 +167,51 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       }
 
       if let Some((id, rune)) = etched {
-        self.create_rune_entry(txid, artifact, id, rune)?;
+        let e = self.create_rune_entry(txid, artifact, id, rune)?;
+        //ubox event
+        let mut terms = None;
+        let height = self.height as u64;
+        if let Some(t) = e.terms {
+          let start_height = t.height.0;
+          let end_height = t.height.1;
+          let start_offset = t.offset.0;
+          let end_offset = t.offset.1;
+          let mut abs_start_height = Some(height);
+          let mut abs_end_height = None;
+          if start_height.is_some() && start_height.unwrap() > abs_start_height.unwrap() {
+            abs_start_height = start_height;
+          }
+          if start_offset.is_some() && start_offset.unwrap() + height > abs_start_height.unwrap() {
+            abs_start_height = Some(start_offset.unwrap() + height);
+          }
+          if end_offset.is_some() {
+            abs_end_height = Some(end_offset.unwrap() + height);
+          }
+          if end_height.is_some() && (abs_end_height.is_none() || end_height.unwrap() < abs_end_height.unwrap()) {
+            abs_end_height = end_height;
+          }
+
+          terms = Some(ubox::runes::rune_event::Terms {
+            amount: t.amount,
+            cap: t.cap,
+            start_height,
+            end_height,
+            start_offset,
+            end_offset,
+            abs_start_height,
+            abs_end_height,
+          });
+        };
+        etch = Some(ubox::runes::rune_event::Etch {
+          rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
+          rune: Some(rune),
+          spacers: Some(e.spaced_rune.spacers),
+          spacer_rune: Some(e.spaced_rune),
+          divisibility: Some(e.divisibility),
+          premine: Some(e.premine),
+          symbol: e.symbol,
+          terms,
+        });
       }
     }
 
@@ -346,7 +330,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     artifact: &Artifact,
     id: RuneId,
     rune: Rune,
-  ) -> Result {
+  ) -> Result<RuneEntry> {
     self.rune_to_id.insert(rune.store(), id.store())?;
     self
       .transaction_id_to_rune
@@ -415,7 +399,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         .insert(sequence_number.value(), id.store())?;
     }
 
-    Ok(())
+    Ok(entry)
   }
 
   fn etched(
