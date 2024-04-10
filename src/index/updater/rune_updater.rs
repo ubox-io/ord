@@ -142,7 +142,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         if let Some(amount) = self.mint(id)? {
           *unallocated.entry(id).or_default() += amount;
           // ubox event
-          rune_mint = Some(RuneMint { id, amount: amount.0 })
+          rune_mint = Some(RuneMint { id, amount: amount.0, script_pubkey: Default::default(), address: None })
         }
       }
 
@@ -259,6 +259,11 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
             .map(|(vout, _tx_out)| vout)
         })
       {
+        if let Some(rune_mint) = &mut rune_mint{
+          let transaction = tx.clone();
+          let outputs = transaction.output;
+          rune_mint.script_pubkey = outputs[vout].clone().script_pubkey;
+        }
         for (id, balance) in unallocated {
           if balance > 0 {
             *allocated[vout].entry(id).or_default() += balance;

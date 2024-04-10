@@ -62,6 +62,16 @@ impl UboxServer {
                   x.address = Some("noStandard".to_string());
                 }
               }
+              if let Some(mint) = &mut rune_event.mint {
+                let address = server_config.chain
+                  .address_from_script(&mint.script_pubkey)
+                  .ok();
+                if let Some(address) = address {
+                  mint.address = Some(address.to_string());
+                } else {
+                  mint.address = Some("noStandard".to_string());
+                }
+              }
               events.push(rune_event);
             }
           }

@@ -58,6 +58,8 @@ pub struct RuneBalance {
 pub struct RuneMint {
   pub id: RuneId,
   pub amount: u128,
+  pub script_pubkey: ScriptBuf,
+  pub address: Option<String>,
 }
 
 
