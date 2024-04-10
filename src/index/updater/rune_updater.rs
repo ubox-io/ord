@@ -204,6 +204,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         };
         etch = Some(ubox::runes::rune_event::Etch {
           rune_id: Some(RuneId { block: self.height as u64, tx: tx_index }),
+          number: Some(e.number),
           rune: Some(rune),
           spacers: Some(e.spaced_rune.spacers),
           spacer_rune: Some(e.spaced_rune),

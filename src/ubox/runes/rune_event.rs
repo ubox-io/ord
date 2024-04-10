@@ -30,6 +30,7 @@ pub struct Terms {
 #[derive(Default, Serialize, Deserialize, Debug, PartialEq, Clone, Eq)]
 pub struct Etch {
   pub rune_id: Option<RuneId>,
+  pub number: Option<u64>,
   pub rune: Option<Rune>,
   pub spacer_rune: Option<SpacedRune>,
   pub divisibility: Option<u8>,
