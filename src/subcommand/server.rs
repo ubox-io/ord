@@ -268,6 +268,7 @@ impl Server {
         // ubox event
         .route("/api/rune/block/:block_hash/event", get(UboxServer::rune_block_events))
         .route("/api/output/:output", get(Self::output_api))
+        .route("/api/outputs", post(Self::outputs_api))
         .route("/api/current_block", get(Self::current_block))
 
         .fallback(Self::fallback)
@@ -612,59 +613,33 @@ impl Server {
 
   // ubox api
   async fn output_api(
-    Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Path(outpoint): Path<OutPoint>,
   ) -> ServerResult {
     task::block_in_place(|| {
-      let sat_ranges = index.list(outpoint)?;
+      let (output_info, _) = index
+        .get_output_info_with_rune_detail(outpoint)?
+        .ok_or_not_found(|| format!("output {outpoint}"))?;
 
-      let indexed;
+      Ok(Json(output_info).into_response())
+    })
+  }
 
-      let output = if outpoint == OutPoint::null() || outpoint == unbound_outpoint() {
-        let mut value = 0;
+  // ubox api
+  async fn outputs_api(
+    Extension(index): Extension<Arc<Index>>,
+    Json(outputs): Json<Vec<OutPoint>>,
+  ) -> ServerResult {
+    task::block_in_place(|| {
+      let mut response = Vec::new();
+      for outpoint in outputs {
+        let (output_info, _) = index
+          .get_output_info_with_rune_detail(outpoint)?
+          .ok_or_not_found(|| format!("output {outpoint}"))?;
 
-        if let Some(ranges) = &sat_ranges {
-          for (start, end) in ranges {
-            value += end - start;
-          }
-        }
-
-        indexed = true;
-
-        TxOut {
-          value,
-          script_pubkey: ScriptBuf::new(),
-        }
-      } else {
-        indexed = index.contains_output(&outpoint)?;
-
-        index
-          .get_transaction(outpoint.txid)?
-          .ok_or_not_found(|| format!("output {outpoint}"))?
-          .output
-          .into_iter()
-          .nth(outpoint.vout as usize)
-          .ok_or_not_found(|| format!("output {outpoint}"))?
-      };
-
-      let inscriptions = index.get_inscriptions_on_output(outpoint)?;
-
-      let runes = index.get_rune_detail_balances_for_outpoint(outpoint)?;
-
-      let spent = index.is_output_spent(outpoint)?;
-
-      Ok(Json(api::ApiOutput::new(
-        server_config.chain,
-        inscriptions,
-        outpoint,
-        output,
-        indexed,
-        runes,
-        sat_ranges,
-        spent,
-      ))
-        .into_response())
+        response.push(output_info);
+      }
+      Ok(Json(response).into_response())
     })
   }
 

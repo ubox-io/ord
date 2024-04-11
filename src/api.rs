@@ -166,14 +166,13 @@ pub struct ApiOutput {
   pub indexed: bool,
   pub inscriptions: Vec<InscriptionId>,
   pub runes: Vec<(SpacedRune, Pile, RuneId, u64, ordinals::Rune)>,
-  pub sat_ranges: Option<Vec<(u64, u64)>>,
   pub script_pubkey: String,
   pub spent: bool,
   pub transaction: String,
   pub value: u64,
 }
 
-impl crate::api::ApiOutput {
+impl ApiOutput {
   pub fn new(
     chain: Chain,
     inscriptions: Vec<InscriptionId>,
@@ -181,7 +180,6 @@ impl crate::api::ApiOutput {
     output: TxOut,
     indexed: bool,
     runes: Vec<(SpacedRune, Pile, RuneId, u64, ordinals::Rune)>,
-    sat_ranges: Option<Vec<(u64, u64)>>,
     spent: bool,
   ) -> Self {
     Self {
@@ -192,7 +190,6 @@ impl crate::api::ApiOutput {
       indexed,
       inscriptions,
       runes,
-      sat_ranges,
       script_pubkey: output.script_pubkey.to_asm_string(),
       spent,
       transaction: outpoint.txid.to_string(),
