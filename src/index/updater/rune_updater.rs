@@ -229,6 +229,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           premine: Some(e.premine),
           symbol: e.symbol,
           terms,
+          turbo: e.turbo,
         });
       }
     }

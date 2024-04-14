@@ -38,6 +38,7 @@ pub struct Etch {
   pub spacers: Option<u32>,
   pub symbol: Option<char>,
   pub terms: Option<Terms>,
+  pub turbo: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
