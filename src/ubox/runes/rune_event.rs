@@ -61,6 +61,8 @@ pub struct RuneMint {
   pub amount: u128,
   pub script_pubkey: ScriptBuf,
   pub address: Option<String>,
+  pub block_height: u32,
+  pub txid: Txid,
 }
 
 

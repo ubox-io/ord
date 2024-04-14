@@ -7,6 +7,7 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
   pub(super) block_time: u32,
   pub(super) burned: HashMap<RuneId, Lot>,
   pub(super) client: &'client Client,
+  pub(super) event_sender: Option<&'a Sender<Event>>,
   pub(super) height: u32,
   pub(super) id_to_entry: &'a mut Table<'tx, RuneIdValue, RuneEntryValue>,
   pub(super) inscription_id_to_sequence_number: &'a Table<'tx, InscriptionIdValue, u32>,
@@ -82,7 +83,23 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         if let Some(amount) = self.mint(id)? {
           *unallocated.entry(id).or_default() += amount;
           // ubox event
-          rune_mint = Some(RuneMint { id, amount: amount.0, script_pubkey: Default::default(), address: None })
+          rune_mint = Some(RuneMint {
+            block_height: self.height,
+            txid,
+            id,
+            amount: amount.n(),
+            script_pubkey: Default::default(),
+            address: None,
+          });
+
+          if let Some(sender) = self.event_sender {
+            sender.blocking_send(Event::RuneMinted {
+              block_height: self.height,
+              txid,
+              rune_id: id,
+              amount: amount.n(),
+            })?;
+          }
         }
       }
 
@@ -288,18 +305,29 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       // Sort balances by id so tests can assert balances in a fixed order
       balances.sort();
 
+      let outpoint = OutPoint {
+        txid,
+        vout: vout.try_into().unwrap(),
+      };
+
       for (id, balance) in balances {
         Index::encode_rune_balance(id, balance.n(), &mut buffer);
+
+        if let Some(sender) = self.event_sender {
+          sender.blocking_send(Event::RuneTransferred {
+            outpoint,
+            block_height: self.height,
+            txid,
+            rune_id: id,
+            amount: balance.0,
+          })?;
+        }
       }
 
-      self.outpoint_to_balances.insert(
-        &OutPoint {
-          txid,
-          vout: vout.try_into().unwrap(),
-        }
-          .store(),
-        buffer.as_slice(),
-      )?;
+
+      self
+        .outpoint_to_balances
+        .insert(&outpoint.store(), buffer.as_slice())?;
     }
 
     // ubox event
@@ -308,6 +336,15 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     // increment entries with burned runes
     for (id, amount) in burned {
       *self.burned.entry(id).or_default() += amount;
+
+      if let Some(sender) = self.event_sender {
+        sender.blocking_send(Event::RuneBurned {
+          block_height: self.height,
+          txid,
+          rune_id: id,
+          amount: amount.n(),
+        })?;
+      }
     }
 
     // ubox event
@@ -357,6 +394,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         spaced_rune: SpacedRune { rune, spacers: 0 },
         symbol: None,
         timestamp: self.block_time.into(),
+        turbo: false,
       },
       Artifact::Runestone(Runestone { etching, .. }) => {
         let Etching {
@@ -365,6 +403,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           premine,
           spacers,
           symbol,
+          turbo,
           ..
         } = etching.unwrap();
 
@@ -383,11 +422,20 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           },
           symbol,
           timestamp: self.block_time.into(),
+          turbo,
         }
       }
     };
 
     self.id_to_entry.insert(id.store(), entry.store())?;
+
+    if let Some(sender) = self.event_sender {
+      sender.blocking_send(Event::RuneEtched {
+        block_height: self.height,
+        txid,
+        rune_id: id,
+      })?;
+    }
 
     let inscription_id = InscriptionId { txid, index: 0 };
 
@@ -501,21 +549,37 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
           .client
           .get_raw_transaction_info(&input.previous_output.txid, None)
           .into_option()?
-          else {
-            panic!("input not in UTXO set: {}", input.previous_output);
-          };
+
+        else {
+          panic!(
+            "can't get input transaction: {}",
+            input.previous_output.txid
+          );
+        };
 
         let taproot = tx_info.vout[input.previous_output.vout.into_usize()]
           .script_pub_key
           .script()?
           .is_v1_p2tr();
 
-        let mature = tx_info
-          .confirmations
-          .map(|confirmations| confirmations >= Runestone::COMMIT_INTERVAL.into())
-          .unwrap_or_default();
+        if !taproot {
+          continue;
+        }
 
-        if taproot && mature {
+        let commit_tx_height = self
+          .client
+          .get_block_header_info(&tx_info.blockhash.unwrap())
+          .into_option()?
+          .unwrap()
+          .height;
+
+        let confirmations = self
+          .height
+          .checked_sub(commit_tx_height.try_into().unwrap())
+          .unwrap()
+          + 1;
+
+        if confirmations >= Runestone::COMMIT_CONFIRMATIONS.into() {
           return Ok(true);
         }
       }
