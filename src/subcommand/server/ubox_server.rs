@@ -31,7 +31,7 @@ impl UboxServer {
           if let Ok(blockhash) = blockhash {
             if let Some(blockhash) = blockhash {
               if block.hash != blockhash {
-                return Err("Block not found");
+                return Ok(Json(RuneBlockEvents { events, blockhash: block_hash }))
               }
             } else {
               return Err("Not sync to this block");
