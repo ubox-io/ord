@@ -391,6 +391,7 @@ fn get_block() {
       best_height: 1,
       height: 0,
       inscriptions: Vec::new(),
+      runes: Vec::new(),
     }
   );
 }
@@ -634,6 +635,7 @@ fn get_runes() {
     }
   );
 }
+
 #[test]
 fn get_runes_balances() {
   let core = mockcore::builder().network(Network::Regtest).build();
